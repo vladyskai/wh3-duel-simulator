@@ -1,13 +1,22 @@
-// Unit against unit: many soldiers per side, everyone fighting at once.
+// Unit against unit: many soldiers per side, only the front line fighting.
 // Three tools, from fastest to most faithful:
 //   1. Lanchester's equations: the average fight, as smooth curves.
 //   2. A Markov chain on the head counts: the full distribution of outcomes.
 //   3. A soldier-by-soldier simulation: the referee for the other two.
 //
 // unit = the duel's soldier { attack, defence, base, ap, armour, hp, interval }
-//        plus { men, splash }  (splash = most soldiers one swing can target, 1 = none)
+//        plus { men, splash, ranks }
+//        splash = most soldiers one swing can target (1 = none)
+//        ranks  = formation depth: the front line is ceil(men / ranks) soldiers, and only the
+//                 front line fights. When a front soldier dies, the next one from behind steps in.
+//                 ranks = 1 means everyone fights.
 // opts = { limits, minDamage, targeting: 'stick' | 'spread', stagger: true }
 import { hitChance, hitDamage, hitsNeededDist, rollDamage } from './model.js';
+
+// Soldiers in the front line at the start (it stays this wide until fewer are left).
+export const frontage = (U) => Math.max(1, Math.ceil(U.men / Math.max(1, U.ranks || 1)));
+// Soldiers fighting when x are alive (x may be fractional in Lanchester).
+const engaged = (x, F) => Math.min(x, F);
 
 // ---- Kill rates ---------------------------------------------------------------------------
 // One attacker's kills per second against fresh enemies, when one swing targets m soldiers.
@@ -38,11 +47,17 @@ export function killRates(att, def, opts = {}) {
 const rateFor = (rates, enemies) => rates[Math.max(1, Math.min(rates.length - 1, enemies))];
 
 // ---- 1. Lanchester ------------------------------------------------------------------------
-// dA/dt = -lambda_B * B,  dB/dt = -lambda_A * A   (everyone engaged: the square law)
-// Integrated with Runge-Kutta 4 so the splash cap (targets <= enemies left) can be included.
+// dA/dt = -lambda_B * min(B, F_B),  dB/dt = -lambda_A * min(A, F_A)
+// F is the front line. Everyone engaged (F >= men) gives the square law, a narrow front the
+// linear law. Integrated with Runge-Kutta 4 so the caps can be included.
 export function lanchester(A, B, opts = {}, rates = null, dt = 0.05, tMax = 3600) {
   const rA = rates ? rates.A : killRates(A, B, opts), rB = rates ? rates.B : killRates(B, A, opts);
-  const f = (a, b) => [-rateFor(rB, Math.ceil(a)) * Math.max(0, b), -rateFor(rA, Math.ceil(b)) * Math.max(0, a)];
+  const FA = frontage(A), FB = frontage(B);
+  const f = (a, b) => {
+    const ea = engaged(Math.max(0, a), FA), eb = engaged(Math.max(0, b), FB);
+    // a swing can only reach enemies in the front line, which caps the splash targets too
+    return [-rateFor(rB, Math.ceil(ea)) * eb, -rateFor(rA, Math.ceil(eb)) * ea];
+  };
   let a = A.men, b = B.men, t = 0;
   const series = [{ t: 0, a, b }];
   let next = 1;
@@ -65,11 +80,13 @@ export function lanchester(A, B, opts = {}, rates = null, dt = 0.05, tMax = 3600
   }
   series.push({ t, a, b });
   const stalled = t >= tMax;
-  // The square law verdict (exact for this ODE when neither side splashes).
-  const strengthA = rA[1] * A.men * A.men, strengthB = rB[1] * B.men * B.men;
+  // The two textbook verdicts: the square law (everyone fights) and the linear law (both fronts
+  // stay full for the whole fight). Real fights with a front line sit between them.
+  const square = { A: rA[1] * A.men * A.men, B: rB[1] * B.men * B.men };
+  const linear = { A: rA[1] * FA * A.men, B: rB[1] * FB * B.men };
   return { series, duration: stalled ? Infinity : t, survA: a, survB: b,
     winner: stalled ? 'none' : (b <= 0 && a > 0 ? 'A' : a <= 0 && b > 0 ? 'B' : 'tie'),
-    strengthA, strengthB, rA, rB };
+    square, linear, FA, FB, rA, rB };
 }
 
 // ---- 2. Markov chain on the head counts ---------------------------------------------------
@@ -93,6 +110,7 @@ export function markov(A, B, opts = {}, rates = null, stages = true) {
       if (cA * A.men >= cB * B.men && cA > 1) cA = Math.max(1, Math.floor(cA * 0.8)); else cB = Math.max(1, Math.floor(cB * 0.8));
     }
   }
+  const FA = frontage(A), FB = frontage(B);
   const X = A.men * cA, Y = B.men * cB, W = Y + 1;
   const prob = new Float64Array((X + 1) * (Y + 1));
   prob[X * W + Y] = 1;
@@ -107,7 +125,8 @@ export function markov(A, B, opts = {}, rates = null, stages = true) {
       const i = Math.ceil(x / cA), j = Math.ceil(y / cB); // soldiers alive
       if (x === 0) { survB[j] += P; continue; }
       if (y === 0) { survA[i] += P; continue; }
-      const toB = rateFor(rA, j) * i * cB, toA = rateFor(rB, i) * j * cA, r = toB + toA;
+      const ei = engaged(i, FA), ej = engaged(j, FB); // only the front lines fight
+      const toB = rateFor(rA, ej) * ei * cB, toA = rateFor(rB, ei) * ej * cA, r = toB + toA;
       if (r <= 0) { stuck += P; continue; }
       meanT += P / r; // the average stay in this state is 1 / r
       prob[x * W + y - 1] += P * toB / r;
@@ -125,21 +144,28 @@ export function markov(A, B, opts = {}, rates = null, stages = true) {
 // Every soldier swings once per attack interval. With stagger on, each soldier's first swing is
 // at a random moment inside its first interval (a real unit does not swing in unison).
 // Swings at the same instant resolve together, as in the duel.
+// Only the front line swings and can be hit. `alive` holds the front line, the soldiers behind
+// wait in order and step in (at once) when a front soldier dies.
 export function simulateUnits(A, B, opts = {}, rand = Math.random, sampleDt = 1, tMax = 3600) {
   const lim = opts.limits || null, md = !!opts.minDamage, stick = (opts.targeting || 'stick') === 'stick';
   const stagger = opts.stagger !== false;
   const side = (U, E) => {
-    const n = U.men, hp = new Float64Array(n).fill(U.hp);
-    const alive = Array.from({ length: n }, (_, i) => i), pos = Int32Array.from(alive);
+    const n = U.men, F = Math.min(n, frontage(U)), hp = new Float64Array(n).fill(U.hp);
+    const alive = Array.from({ length: F }, (_, i) => i), pos = new Int32Array(n).fill(-1);
+    for (let i = 0; i < F; i++) pos[i] = i;
     const off = Array.from({ length: n }, () => (stagger ? rand() * U.interval : 0));
     const order = Array.from({ length: n }, (_, i) => i).sort((x, y) => off[x] - off[y]);
-    return { U, n, hp, alive, pos, off, order, ptr: 0, cycle: 0, target: new Int32Array(n).fill(-1),
+    return { U, n, hp, alive, pos, reserve: F, off, order, ptr: 0, cycle: 0, target: new Int32Array(n).fill(-1),
       p: hitChance(U.attack, E.defence, lim) };
   };
   const SA = side(A, B), SB = side(B, A);
+  const count = (S) => S.alive.length + (S.n - S.reserve); // front line plus those waiting
   const nextTime = (S) => S.off[S.order[S.ptr]] + S.cycle * S.U.interval;
   const advance = (S) => { S.ptr++; if (S.ptr === S.n) { S.ptr = 0; S.cycle++; } };
-  const remove = (S, x) => { const k = S.pos[x]; const last = S.alive.pop(); if (last !== x) { S.alive[k] = last; S.pos[last] = k; } S.pos[x] = -1; };
+  const remove = (S, x) => {
+    const k = S.pos[x]; const last = S.alive.pop(); if (last !== x) { S.alive[k] = last; S.pos[last] = k; } S.pos[x] = -1;
+    if (S.reserve < S.n) { const z = S.reserve++; S.pos[z] = S.alive.length; S.alive.push(z); } // the next one steps in
+  };
 
   const swing = (S, E, x) => {
     if (E.alive.length === 0) return;
@@ -164,7 +190,7 @@ export function simulateUnits(A, B, opts = {}, rand = Math.random, sampleDt = 1,
     const tt = Math.min(nextTime(SA), nextTime(SB));
     t = tt / 10;
     if (t > tMax) { t = Infinity; break; }
-    while (nextSample < t) { samples.push({ t: nextSample, a: SA.alive.length, b: SB.alive.length }); nextSample += sampleDt; }
+    while (nextSample < t) { samples.push({ t: nextSample, a: count(SA), b: count(SB) }); nextSample += sampleDt; }
     const batchA = [], batchB = [];
     while (nextTime(SA) === tt) { batchA.push(SA.order[SA.ptr]); advance(SA); }
     while (nextTime(SB) === tt) { batchB.push(SB.order[SB.ptr]); advance(SB); }
@@ -173,8 +199,8 @@ export function simulateUnits(A, B, opts = {}, rand = Math.random, sampleDt = 1,
     for (const x of batchB) if (SB.pos[x] >= 0) swing(SB, SA, x);
     for (const S of [SA, SB]) for (let k = S.alive.length - 1; k >= 0; k--) { const y = S.alive[k]; if (S.hp[y] <= 1e-9) remove(S, y); }
   }
-  samples.push({ t, a: SA.alive.length, b: SB.alive.length });
-  const a = SA.alive.length, b = SB.alive.length;
+  const a = count(SA), b = count(SB);
+  samples.push({ t, a, b });
   return { winner: a && !b ? 'A' : b && !a ? 'B' : !a && !b ? 'tie' : 'none', duration: t, survA: a, survB: b, samples };
 }
 

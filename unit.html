@@ -12,7 +12,7 @@
   <nav class="tabs"><a href="index.html">One soldier against one</a><a href="unit.html" aria-current="page">Unit against unit</a></nav>
   <header>
     <h1>Unit against unit</h1>
-    <p class="lede">Two units, everyone fighting at once. Three tools answer who wins: two fast approximations and a soldier-by-soldier simulation that referees them.</p>
+    <p class="lede">Two units in line against each other. Only the front line fights, and the ranks behind step in as it falls. Three tools answer who wins: two fast approximations and a soldier-by-soldier simulation that referees them.</p>
   </header>
 
   <section class="units">
@@ -49,14 +49,19 @@
 
   <section class="step">
     <h3>2. Lanchester's equations: the average fight</h3>
-    <p>Each side loses soldiers at the enemy's kill rate times the number of enemies. Solid lines are this smooth, luck-free fight. Dashed lines are the average of the simulated fights.</p>
+    <p>Each side loses soldiers at the enemy's kill rate times the number of enemies fighting, which is the front line until fewer are left. Solid lines are this smooth, luck-free fight. Dashed lines are the average of the simulated fights.</p>
+    <div id="laws" class="bars"></div>
     <div class="legend" id="curvelegend"></div>
     <div class="chart tall"><canvas id="curvechart" role="img" aria-label="Soldiers alive over time for both units, Lanchester and simulation"></canvas></div>
     <details><summary>Formula</summary>
-      <div class="tex" data-tex="\frac{dA}{dt} = -\lambda_B\, B, \qquad \frac{dB}{dt} = -\lambda_A\, A"></div>
-      <p class="note">Divide one by the other and integrate: the quantity below never changes during the fight.</p>
+      <div class="tex" data-tex="\frac{dA}{dt} = -\lambda_B \min(B,\ F_B), \qquad \frac{dB}{dt} = -\lambda_A \min(A,\ F_A)"></div>
+      <p class="note">F is the front line: the unit's soldiers divided by its ranks, rounded up. Two extreme cases have exact answers.</p>
+      <p class="note">Everyone fights (one rank, F at least the whole unit): divide one equation by the other and integrate, and this never changes during the fight:</p>
       <div class="tex" data-tex="\lambda_A A^2 - \lambda_B B^2 = \text{constant} \quad\Longrightarrow\quad A \text{ wins} \iff \lambda_A A_0^2 > \lambda_B B_0^2"></div>
-      <p class="note">This is the square law: a unit's strength is its kill rate times its numbers squared. Twice the soldiers are worth four times the quality, because everyone fights at once. The winner keeps the square root of the difference. The curves never quite reach zero, so a side counts as beaten below half a soldier. The law ignores luck, so it calls close fights with false certainty, and it treats a single monster as a smooth fraction of a soldier.</p>
+      <p class="note">This is the square law: strength is kill rate times numbers squared. Twice the soldiers are worth four times the quality, because the extra soldiers all fight.</p>
+      <p class="note">Both fronts stay full for the whole fight (deep ranks): each side loses soldiers at a constant rate, and this never changes:</p>
+      <div class="tex" data-tex="\lambda_A F_A\, A - \lambda_B F_B\, B = \text{constant} \quad\Longrightarrow\quad A \text{ wins} \iff \lambda_A F_A\, A_0 > \lambda_B F_B\, B_0"></div>
+      <p class="note">This is the linear law: numbers only count once, because the extra soldiers wait behind. Real fights start near the linear law and end near the square law, once a front line can no longer be filled. The curves never quite reach zero, so a side counts as beaten below half a soldier. Lanchester ignores luck, so it calls close fights with false certainty, and it treats a single monster as a smooth fraction of a soldier.</p>
     </details>
   </section>
 
@@ -79,11 +84,13 @@
     <p>Every soldier, every swing, every hit point, with the rules above. It is slow, so it runs a few hundred fights after each change. With one soldier per side and no stagger it gives exactly the duel page's answers (checked by the tests).</p>
     <details><summary>Rules</summary>
       <p class="note">Each soldier swings once per attack interval, starting at a random moment inside its first interval (a real unit does not swing in unison). It targets one enemy, either keeping it until it dies or picking a random living enemy each swing. With splash m, the swing also targets m&minus;1 other random enemies, and each takes 1/m of the damage. Damage does not carry over from a dead soldier to the next.</p>
-      <p class="note">How the game's soldiers really pick their targets is not documented anywhere I could find, so both rules are offered. Everyone fights from the first second: frontage (only the front ranks in contact) is the next step.</p>
+      <p class="note">Only the front line swings and can be hit. When a front soldier dies, the next soldier from behind steps in at once (in the game they take a moment to walk forward). Each unit keeps its own front width: if one front is wider, its extra soldiers are assumed to wrap round the enemy's flank and fight too.</p>
+      <p class="note">How the game's soldiers really pick their targets is not documented anywhere I could find, so both rules are offered.</p>
+      <p class="note">Ranks deep: the game's land_units table gives each unit a default formation depth (rank_depth), 4 to 8 ranks for most infantry, so a 160-soldier unit 8 deep has a front of 20. That only the front rank fights is an assumption. A single monster gets surrounded in the game, so give the infantry facing it 1 rank.</p>
     </details>
   </section>
 
-  <footer>Model version 5: unit against unit, everyone engaged, splash, two targeting rules. Next: frontage, then morale and charge.</footer>
+  <footer>Model version 6: unit against unit with front lines, splash, two targeting rules. Next: morale and charge.</footer>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>

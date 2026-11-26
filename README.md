@@ -20,15 +20,15 @@ The armour rule, the 8% to 90% limits and the 1 damage minimum are how players d
 
 Not covered yet: charge, bonus vs large or vs infantry, morale, more than one soldier per unit.
 
-## Unit against unit (version 5, `unit.html`)
+## Unit against unit (version 6, `unit.html`)
 
-Many soldiers per side, everyone fighting at once, with splash (one swing can target several soldiers and splits its damage between them, as players describe the game's `splash_attack_max_attacks`). Three tools:
+Many soldiers per side, with front lines (only the front line fights, the ranks behind step in; the depth comes from the game's `land_units.rank_depth`, 4 to 8 ranks for most infantry) and splash (one swing can target several soldiers and splits its damage between them, as players describe the game's `splash_attack_max_attacks`). Three tools:
 
 1. **Lanchester's equations**: the average fight as smooth curves, and the square law (strength = kill rate x soldiers squared).
 2. **A Markov chain on the head counts**: the odds of every ending. Each soldier counts as several Erlang stages so the chain's randomness matches the real time to kill (the plain memoryless chain is shown for comparison).
 3. **A soldier-by-soldier simulation**: the referee. With one soldier per side and no stagger it reproduces the duel model exactly.
 
-How soldiers pick their targets is not documented, so the page offers two rules: keep the target until it dies, or hit a random enemy each swing. Frontage, morale and charge are not modelled yet.
+How soldiers pick their targets is not documented, so the page offers two rules: keep the target until it dies, or hit a random enemy each swing. Morale and charge are not modelled yet.
 
 Measured accuracy of the fast tools against the simulation (`node check/test_units.mjs`): the corrected chain gets the favourite right and usually lands within the gap between the two targeting rules, but it overestimates fight length by about 30% in close fights. Lanchester calls close fights with false certainty and fails with very few soldiers (a single monster).
 

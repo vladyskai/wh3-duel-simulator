@@ -17,10 +17,11 @@ const FIELDS = [
   { key: 'hp', label: 'Hit points each', min: 1, max: 6000 },
   { key: 'interval', label: 'Attack interval', min: 20, max: 60, show: (v) => (v / 10).toFixed(1) + ' s' },
   { key: 'splash', label: 'Targets per swing', min: 1, max: 10 },
+  { key: 'ranks', label: 'Ranks deep', min: 1, max: 20 },
 ];
 const DEFAULTS = {
-  A: { men: 100, attack: 40, defence: 30, base: 25, ap: 5, armour: 30, hp: 100, interval: 40, splash: 1 },
-  B: { men: 90, attack: 45, defence: 35, base: 25, ap: 5, armour: 30, hp: 100, interval: 40, splash: 1 },
+  A: { men: 100, attack: 40, defence: 30, base: 25, ap: 5, armour: 30, hp: 100, interval: 40, splash: 1, ranks: 5 },
+  B: { men: 80, attack: 45, defence: 35, base: 25, ap: 5, armour: 30, hp: 100, interval: 40, splash: 1, ranks: 4 },
 };
 for (const side of ['A', 'B']) {
   document.querySelector(`.unit[data-side="${side}"] .ctls`).innerHTML = FIELDS.map((f) => `<div class="ctl"><label for="${side}-${f.key}">${f.label}</label>
@@ -68,10 +69,15 @@ function render() {
     $('duration').textContent = `Average fight length: ${secs(mk.meanDuration)} (Markov chain with stages; the table compares all three tools)`;
   }
 
-  // Step 1: kill rates and square-law strength.
-  const r1 = (lab, r, col, n) => `<div class="row"><span>${lab}</span><div class="sub" style="margin:0;color:var(--text)">${r > 0 ? `${r.toFixed(4)} kills per second: one kill every ${secs(1 / r)}` : 'can never kill'}. Strength λ·N² = ${(r * n * n).toFixed(1)}</div></div>`;
-  $('rates').innerHTML = r1('Each A soldier', rates.A[1], ca, A.men) + r1('Each B soldier', rates.B[1], cb, B.men)
+  // Step 1: kill rates and front lines.
+  const r1 = (lab, r, U, F) => `<div class="row"><span>${lab}</span><div class="sub" style="margin:0;color:var(--text)">${r > 0 ? `${r.toFixed(4)} kills per second: one kill every ${secs(1 / r)}` : 'can never kill'}. Front line ${F} of ${U.men} soldiers (${U.ranks} rank${U.ranks > 1 ? 's' : ''} deep)</div></div>`;
+  $('rates').innerHTML = r1('Each A soldier', rates.A[1], A, ln.FA) + r1('Each B soldier', rates.B[1], B, ln.FB)
     + (A.splash > 1 || B.splash > 1 ? '<p class="note">With splash, the rate shown is for one target per swing. The tools use the rate for as many targets as the swing can reach.</p>' : '');
+
+  // Step 2: the two textbook laws.
+  const fav = (o) => (Math.abs(o.A - o.B) < 0.01 * Math.max(o.A, o.B) ? 'it is about even' : `${o.A > o.B ? 'A' : 'B'} is favoured`);
+  $('laws').innerHTML = `<div class="row"><span>Square law</span><div class="sub" style="margin:0;color:var(--text)">if everyone fought: strength λ·N² is A ${ln.square.A.toFixed(1)} against B ${ln.square.B.toFixed(1)}, so ${fav(ln.square)}</div></div>
+    <div class="row"><span>Linear law</span><div class="sub" style="margin:0;color:var(--text)">if both fronts stayed full: strength λ·F·N is A ${ln.linear.A.toFixed(1)} against B ${ln.linear.B.toFixed(1)}, so ${fav(ln.linear)}</div></div>`;
 
   // Step 3 note on stages.
   $('stagesnote').textContent = `Here: each A soldier counts as ${mk.cA} stage${mk.cA > 1 ? 's' : ''} and each B soldier as ${mk.cB}. The plain chain (c = 1) would say A wins ${pct(mk1.winA)} instead of ${pct(mk.winA)}.`;

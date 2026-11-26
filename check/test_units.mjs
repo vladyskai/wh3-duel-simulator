@@ -50,6 +50,29 @@ duels.forEach(([A, B, o], i) => {
   near('Markov with stages: identical units, A wins', markov(U, U).winA, 0.5, 1e-9);
 }
 
+// ---- Part 2b: frontage
+{
+  const A = soldier({ men: 100 }), B = soldier({ men: 80, attack: 45 });
+  const deep = (U, r) => ({ ...U, ranks: r });
+  // ranks 1 and no ranks field are the same thing; a front wider than the unit changes nothing
+  near('frontage: ranks 1 = everyone fights (chain)', markov(deep(A, 1), deep(B, 1)).winA, markov(A, B).winA, 1e-12);
+  const s0 = simulateMany(A, B, { targeting: 'stick' }, 300, seededRandom(7));
+  const s1 = simulateMany(deep(A, 1), deep(B, 1), { targeting: 'stick' }, 300, seededRandom(7));
+  near('frontage: ranks 1 = everyone fights (simulation, same seed, identical)', s1.winA, s0.winA, 0);
+  near('frontage: ranks 1 = everyone fights (simulation, same length)', s1.meanDuration, s0.meanDuration, 0);
+  // linear law: with both fronts full, lA FA A - lB FB B stays constant
+  const An = deep(A, 20), Bn = deep(B, 16); // fronts of 5 and 5
+  const l = lanchester(An, Bn), rA = l.rA[1], rB = l.rB[1];
+  near('frontage: fronts are 5 and 5', l.FA + l.FB, 10, 0);
+  if (l.winner === 'A') near('linear law: A survivors (fronts full until the end, so within 3)', l.survA, A.men - (rB * 5 / (rA * 5)) * B.men, 3);
+  else { failed++; console.log('FAIL linear law: expected A to win, A has more men and the same front'); }
+  const m = markov(An, Bn);
+  near('frontage: chain probabilities add to 1', m.winA + m.winB + m.stuck, 1, 1e-9);
+  // square law says B wins (better soldiers, 80 v 100 is enough), linear law says A (numbers count only linearly)
+  const sq = l.square.A > l.square.B ? 'A' : 'B', lin = l.linear.A > l.linear.B ? 'A' : 'B';
+  console.log(`info square-law favourite ${sq}, linear-law favourite ${lin}, Lanchester with fronts of 5: ${l.winner}`);
+}
+
 // ---- Part 3: how good are the fast tools? (measured, printed, not asserted)
 const fights = [
   ['equal 60 v 60', soldier({ men: 60 }), soldier({ men: 60 })],
@@ -59,6 +82,10 @@ const fights = [
 ];
 fights.push(['100 v 90, B better', soldier({ men: 100 }), soldier({ men: 90, attack: 45, defence: 35 })]);
 fights.push(['monster 1 v 20 (splash 5)', soldier({ men: 1, hp: 3000, base: 200, ap: 150, armour: 60, splash: 5 }), soldier({ men: 20, hp: 90, base: 20, ap: 8 })]);
+fights.push(['100 v 80 B better, fronts 20', soldier({ men: 100, ranks: 5 }), soldier({ men: 80, attack: 45, defence: 35, ranks: 4 })]);
+fights.push(['120 v 90, 6 ranks each', soldier({ men: 120, ranks: 6 }), soldier({ men: 90, attack: 45, defence: 35, ranks: 6 })]);
+fights.push(['160 v 120, fronts 20', soldier({ men: 160, ranks: 8 }), soldier({ men: 120, attack: 50, defence: 40, ranks: 6 })]);
+fights.push(['monster 1 v 30, B 6 ranks', soldier({ men: 1, hp: 3000, base: 200, ap: 150, armour: 60, splash: 5 }), soldier({ men: 30, hp: 90, base: 20, ap: 8, ranks: 6 })]);
 console.log('\nfight                       | P(A wins): sim stick  spread | chain stages  plain | Lanch | length s: sim stick spread | chain  Lanch');
 for (const [name, A, B] of fights) {
   const rates = { A: killRates(A, B), B: killRates(B, A) };

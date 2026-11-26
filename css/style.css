@@ -33,6 +33,14 @@ h3 { font-size: 16px; font-weight: 600; margin: 0 0 .25rem; }
 .lim-fields .err { color: #d03b3b; flex-basis: 100%; min-height: 0; }
 .lim-fields .err:empty { display: none; }
 .result { margin: 1.25rem 0 0; }
+.tabs { display: flex; gap: 6px; margin: 0 0 1.5rem; flex-wrap: wrap; }
+.tabs a { font-size: 14px; padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--border); color: var(--muted); text-decoration: none; }
+.tabs a[aria-current="page"] { color: var(--text); background: var(--surface); border-color: var(--text); }
+.tabs a:hover { color: var(--text); }
+.ctl-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+select { font: inherit; font-size: 14px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); max-width: 100%; }
+.chart.tall { height: 280px; }
+#rates .row { grid-template-columns: 120px 1fr; }
 .winbar { display: flex; height: 40px; border-radius: var(--radius); overflow: hidden; font-size: 14px; font-weight: 500; }
 .winbar div { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
 .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); margin: 8px 0; }

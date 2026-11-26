@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WH3 duel simulator: unit against unit</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main>
+  <nav class="tabs"><a href="index.html">One soldier against one</a><a href="unit.html" aria-current="page">Unit against unit</a></nav>
+  <header>
+    <h1>Unit against unit</h1>
+    <p class="lede">Two units, everyone fighting at once. Three tools answer who wins: two fast approximations and a soldier-by-soldier simulation that referees them.</p>
+  </header>
+
+  <section class="units">
+    <div class="unit" data-side="A"><h2><span class="swatch a"></span>Unit A</h2><div class="ctls"></div></div>
+    <div class="unit" data-side="B"><h2><span class="swatch b"></span>Unit B</h2><div class="ctls"></div></div>
+  </section>
+
+  <section class="limits">
+    <div class="ctl-inline"><label for="targeting">When a soldier swings</label>
+      <select id="targeting"><option value="stick">it keeps its target until that enemy dies</option><option value="spread">it hits a random living enemy</option></select></div>
+    <label class="check"><input type="checkbox" id="lim-on"> Use the game's hit chance limits (8% to 90%)</label>
+    <label class="check"><input type="checkbox" id="min-on"> Every hit that lands does at least 1 damage</label>
+  </section>
+
+  <section class="result">
+    <div class="winbar" id="winbar"></div>
+    <div class="legend" id="winlegend"></div>
+    <p class="duration" id="duration"></p>
+    <table id="compare"></table>
+    <p class="note" id="simstatus"></p>
+  </section>
+
+  <h2 class="part">How the answer is computed</h2>
+
+  <section class="step">
+    <h3>1. Each soldier's kill rate</h3>
+    <p>The duel model already knows how many swings one soldier needs, on average, to kill one fresh enemy. Turned into kills per second, that is the only number the fast tools need from each side.</p>
+    <div id="rates" class="bars"></div>
+    <details><summary>Formula</summary>
+      <div class="tex" data-tex="\lambda_A = \frac{m}{a \cdot \mathbb{E}[N_A]}, \qquad \mathbb{E}[N_A] = \frac{\mathbb{E}[K_A]}{p_A}"></div>
+      <p class="note">a is the attack interval and N the swings needed for one kill, from the duel model. This is renewal theory: if each kill takes a·E[N] seconds on average, kills arrive at one per a·E[N] seconds in the long run. m is the number of soldiers one swing can target (splash). Each of them takes 1/m of the damage and rolls its own hit, as players describe the game's splash attacks.</p>
+    </details>
+  </section>
+
+  <section class="step">
+    <h3>2. Lanchester's equations: the average fight</h3>
+    <p>Each side loses soldiers at the enemy's kill rate times the number of enemies. Solid lines are this smooth, luck-free fight. Dashed lines are the average of the simulated fights.</p>
+    <div class="legend" id="curvelegend"></div>
+    <div class="chart tall"><canvas id="curvechart" role="img" aria-label="Soldiers alive over time for both units, Lanchester and simulation"></canvas></div>
+    <details><summary>Formula</summary>
+      <div class="tex" data-tex="\frac{dA}{dt} = -\lambda_B\, B, \qquad \frac{dB}{dt} = -\lambda_A\, A"></div>
+      <p class="note">Divide one by the other and integrate: the quantity below never changes during the fight.</p>
+      <div class="tex" data-tex="\lambda_A A^2 - \lambda_B B^2 = \text{constant} \quad\Longrightarrow\quad A \text{ wins} \iff \lambda_A A_0^2 > \lambda_B B_0^2"></div>
+      <p class="note">This is the square law: a unit's strength is its kill rate times its numbers squared. Twice the soldiers are worth four times the quality, because everyone fights at once. The winner keeps the square root of the difference. The curves never quite reach zero, so a side counts as beaten below half a soldier. The law ignores luck, so it calls close fights with false certainty, and it treats a single monster as a smooth fraction of a soldier.</p>
+    </details>
+  </section>
+
+  <section class="step">
+    <h3>3. A Markov chain: the odds</h3>
+    <p>Follow only the head counts. From any state, the next death is on side A or side B, with chances set by the kill rates. Adding up all the paths gives the probability of every ending.</p>
+    <div class="legend" id="survlegend"></div>
+    <div class="chart"><canvas id="survchart" role="img" aria-label="Probability of each number of survivors for the winning side"></canvas></div>
+    <details><summary>Formula</summary>
+      <div class="tex" data-tex="P\big((i,j) \to (i,\, j-1)\big) = \frac{\lambda_A\, i}{\lambda_A\, i + \lambda_B\, j}, \qquad \text{stay in } (i,j) \text{ for } \frac{1}{\lambda_A\, i + \lambda_B\, j} \text{ s on average}"></div>
+      <p class="note">This plain chain assumes every waiting time is exponential: memoryless, as if a soldier half-way to a kill were no closer to it. Real kills vary much less, so the plain chain makes fights look closer than they are.</p>
+      <p class="note">The correction: count each soldier as c small steps (Erlang stages), each c times as fast. A kill keeps its average time, and its variance shrinks by c. Picking c from the real spread of the time to kill makes the chain's luck match the duel model's:</p>
+      <div class="tex" data-tex="c = \frac{1}{\mathrm{cv}^2}, \qquad \mathrm{cv}^2 = \frac{\mathrm{Var}(N)}{\mathbb{E}[N]^2}"></div>
+      <p class="note" id="stagesnote"></p>
+    </details>
+  </section>
+
+  <section class="step">
+    <h3>4. The simulation: the referee</h3>
+    <p>Every soldier, every swing, every hit point, with the rules above. It is slow, so it runs a few hundred fights after each change. With one soldier per side and no stagger it gives exactly the duel page's answers (checked by the tests).</p>
+    <details><summary>Rules</summary>
+      <p class="note">Each soldier swings once per attack interval, starting at a random moment inside its first interval (a real unit does not swing in unison). It targets one enemy, either keeping it until it dies or picking a random living enemy each swing. With splash m, the swing also targets m&minus;1 other random enemies, and each takes 1/m of the damage. Damage does not carry over from a dead soldier to the next.</p>
+      <p class="note">How the game's soldiers really pick their targets is not documented anywhere I could find, so both rules are offered. Everyone fights from the first second: frontage (only the front ranks in contact) is the next step.</p>
+    </details>
+  </section>
+
+  <footer>Model version 5: unit against unit, everyone engaged, splash, two targeting rules. Next: frontage, then morale and charge.</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script type="module" src="js/unit_app.js"></script>
+</body>
+</html>

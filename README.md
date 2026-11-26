@@ -22,7 +22,7 @@ Not covered yet: charge, bonus vs large or vs infantry, morale, more than one so
 
 ## Unit against unit (version 6, `unit.html`)
 
-Many soldiers per side, with front lines (only the front line fights, the ranks behind step in; the depth comes from the game's `land_units.rank_depth`, 4 to 8 ranks for most infantry) and splash (one swing can target several soldiers and splits its damage between them, as players describe the game's `splash_attack_max_attacks`). Three tools:
+Many soldiers per side, with front lines (only the front line fights and the ranks behind step in, with the depth taken from the game's `land_units.rank_depth`, 4 to 8 ranks for most infantry) and splash (one swing can target several soldiers and splits its damage between them, as players describe the game's `splash_attack_max_attacks`). Three tools:
 
 1. **Lanchester's equations**: the average fight as smooth curves, and the square law (strength = kill rate x soldiers squared).
 2. **A Markov chain on the head counts**: the odds of every ending. Each soldier counts as several Erlang stages so the chain's randomness matches the real time to kill (the plain memoryless chain is shown for comparison).

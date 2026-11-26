@@ -2,6 +2,8 @@
 
 Who wins a melee duel between two single soldiers in Total War: WARHAMMER III, computed exactly from their stats instead of simulating the fight.
 
+**Try it: https://vladyskai.github.io/wh3-duel-simulator/**
+
 The page explains each step of the model with a chart, and keeps the maths under a "Formula" collapsible. A built-in simulator fights the same duel thousands of times so you can see the exact answer and the brute-force answer agree.
 
 ## What the model covers (version 3)

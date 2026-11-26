@@ -22,7 +22,17 @@ h3 { font-size: 16px; font-weight: 600; margin: 0 0 .25rem; }
 .ctl output { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; font-weight: 500; }
 .ctl input { width: 100%; }
 .unit[data-side="A"] input { accent-color: var(--a); } .unit[data-side="B"] input { accent-color: var(--b); }
-.result { margin: 1.5rem 0 0; }
+.limits { margin: 1.25rem 0 0; font-size: 14px; }
+.limits .check { display: flex; width: fit-content; align-items: center; gap: 8px; cursor: pointer; margin: 6px 0; }
+.limits input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--text); margin: 0; }
+.lim-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0 24px; color: var(--muted); }
+.lim-fields[hidden] { display: none; }
+.lim-fields input { width: 64px; font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.lim-fields input[aria-invalid="true"] { border-color: #d03b3b; }
+.lim-fields .pair { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; margin-right: 10px; }
+.lim-fields .err { color: #d03b3b; flex-basis: 100%; min-height: 0; }
+.lim-fields .err:empty { display: none; }
+.result { margin: 1.25rem 0 0; }
 .winbar { display: flex; height: 40px; border-radius: var(--radius); overflow: hidden; font-size: 14px; font-weight: 500; }
 .winbar div { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
 .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); margin: 8px 0; }

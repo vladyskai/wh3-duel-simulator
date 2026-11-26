@@ -6,19 +6,19 @@ Who wins a melee duel between two single soldiers in Total War: WARHAMMER III, c
 
 The page explains each step of the model with a chart, and keeps the maths under a "Formula" collapsible. A built-in simulator fights the same duel thousands of times so you can see the exact answer and the brute-force answer agree.
 
-## What the model covers (version 3)
+## What the model covers (version 4)
 
-1. **Hit chance**: 35 + melee attack minus the enemy's melee defence, as a percentage (kept between 0% and 100%).
-2. **Damage per hit**: armour-piercing damage always lands. Armour blocks a random share of the base damage on each hit, between half and all of the armour value as a percentage, capped at 100%.
+1. **Hit chance**: 35 + melee attack minus the enemy's melee defence, as a percentage, kept between 0% and 100%. A checkbox applies the game's limits instead (8% to 90% by default, both editable, with a button to restore the defaults).
+2. **Damage per hit**: armour-piercing damage always lands. Armour blocks a random share of the base damage on each hit, between half and all of the armour value as a percentage, capped at 100%. A checkbox applies a minimum of 1 damage per hit that lands.
 3. **Hits needed**: the number of random hits that add up to the enemy's hit points, computed as a distribution.
 4. **Swings needed**: a mixture of negative binomial distributions, one per possible number of hits.
 5. **Attack interval**: each soldier swings at t = 0 and then once per interval.
 6. **The race**: the exact chance that A wins, that B wins, or that both die at the same instant.
 7. **Fight length**: the average time until the first killing blow.
 
-The armour rule is how the player community describes the game. It has not been checked against the engine yet.
+The armour rule, the 8% to 90% limits and the 1 damage minimum are how players describe the game. None of them has been checked against the engine yet, which is why the last two are optional.
 
-Not covered yet: the game's 8% to 90% hit chance clamp, charge, bonus vs large or vs infantry, morale, more than one soldier per unit.
+Not covered yet: charge, bonus vs large or vs infantry, morale, more than one soldier per unit.
 
 ## Run it locally
 

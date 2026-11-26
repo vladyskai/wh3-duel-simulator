@@ -1,4 +1,4 @@
-import { duel, fightOnce } from './model.js';
+import { duel, fightOnce, GAME_LIMITS } from './model.js';
 
 const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -82,12 +82,39 @@ function span(f1, f2, cap) {
   return Math.min(Math.max(t1, t2, 5), cap);
 }
 
+// Hit chance limits. Unticked = none. An invalid pair keeps the last valid one and says why.
+let lastLimits = { ...GAME_LIMITS };
+function readLimits() {
+  const on = $('lim-on').checked;
+  $('lim-fields').hidden = !on;
+  const loEl = $('lim-lo'), hiEl = $('lim-hi');
+  const lo = loEl.value.trim() === '' ? NaN : +loEl.value, hi = hiEl.value.trim() === '' ? NaN : +hiEl.value;
+  let err = '';
+  const bad = (x) => !Number.isFinite(x) || x < 0 || x > 100;
+  if (bad(lo) || bad(hi)) err = 'Enter a percentage between 0 and 100 in both boxes.';
+  else if (lo > hi) err = 'The lowest limit cannot be above the highest.';
+  loEl.setAttribute('aria-invalid', String(!!err && (bad(lo) || lo > hi)));
+  hiEl.setAttribute('aria-invalid', String(!!err && (bad(hi) || lo > hi)));
+  $('lim-err').textContent = err ? err + ` Still using ${lastLimits.lo}% to ${lastLimits.hi}%.` : '';
+  if (!err) lastLimits = { lo, hi };
+  return on ? lastLimits : null;
+}
+$('lim-reset').addEventListener('click', () => {
+  $('lim-lo').value = GAME_LIMITS.lo; $('lim-hi').value = GAME_LIMITS.hi;
+  render();
+});
+$('lim-on').addEventListener('change', render);
+$('min-on').addEventListener('change', render);
+['lim-lo', 'lim-hi'].forEach((id) => $(id).addEventListener('input', render));
+
 let state;
 function render() {
   const A = readUnit('A'), B = readUnit('B');
-  const r = duel(A, B);
+  const limits = readLimits();
+  const opts = { limits, minDamage: $('min-on').checked };
+  const r = duel(A, B, opts);
   const ca = css('--a'), cb = css('--b');
-  state = { A, B, r };
+  state = { A, B, r, opts };
 
   // Headline result.
   const seg = (w, bg, fg, label) => (w > 0.0005 ? `<div style="width:${100 * w}%;background:${bg};color:${fg}">${w > 0.09 ? label : ''}</div>` : '');
@@ -114,7 +141,7 @@ function render() {
       <div class="striped" style="left:${w(sure)}%;width:${w(d.max - sure)}%;--c:${col}"></div>
       <div class="tick" style="left:${w(d.mean)}%"></div></div>
       <b>${num(d.mean)}</b></div>
-      <div class="sub">${lab}: ${num(d.min)} to ${num(d.max)} per hit, ${num(d.mean)} on average${d.q > 0 ? `, ${pct(d.q)} of hits lose all their base damage` : ''}</div>`;
+      <div class="sub">${lab}: ${num(d.min)} to ${num(d.max)} per hit, ${num(d.mean)} on average${d.blocked > 0 ? `, ${pct(d.blocked)} of hits lose all their base damage` : ''}${d.floored > 0 ? `, ${pct(d.floored)} are raised to the 1 damage minimum` : ''}</div>`;
   };
   $('damage').innerHTML = dmgRow(r.dA, ca, 'A on B') + dmgRow(r.dB, cb, 'B on A');
 
@@ -158,9 +185,9 @@ function render() {
 
 // One duel on a time axis: filled dot = hit, hollow = miss.
 $('one').addEventListener('click', () => {
-  const { A, B, r } = state;
+  const { A, B, r, opts } = state;
   if (r.nobody) { $('replay').textContent = 'Neither soldier can ever kill the other, so the duel never ends.'; return; }
-  const f = fightOnce(A, B);
+  const f = fightOnce(A, B, Math.random, opts);
   const ca = css('--a'), cb = css('--b');
   const W = 760, L = 30, R = 12, end = Math.max(f.duration, 1);
   const x = (t) => L + ((W - L - R) * t) / end;
@@ -178,11 +205,11 @@ $('one').addEventListener('click', () => {
 });
 
 $('many').addEventListener('click', () => {
-  const { A, B, r } = state;
+  const { A, B, r, opts } = state;
   if (r.nobody) { $('simtable').textContent = 'Neither soldier can ever kill the other, so the duel never ends.'; return; }
   const M = 10000, c = { A: 0, B: 0, tie: 0, none: 0 };
   let sumT = 0, ended = 0;
-  for (let i = 0; i < M; i++) { const f = fightOnce(A, B); c[f.winner]++; if (isFinite(f.duration)) { sumT += f.duration; ended++; } }
+  for (let i = 0; i < M; i++) { const f = fightOnce(A, B, Math.random, opts); c[f.winner]++; if (isFinite(f.duration)) { sumT += f.duration; ended++; } }
   const row = (lab, s, e) => `<tr><td>${lab}</td><td>${s}</td><td>${e}</td></tr>`;
   $('simtable').innerHTML = `<table><tr><th></th><th>10,000 simulated</th><th>Exact formula</th></tr>
     ${row('A wins', pct(c.A / M), pct(r.winA))}${row('Both die', pct(c.tie / M), pct(r.tie))}${row('B wins', pct(c.B / M), pct(r.winB))}${row('Average length', sec(sumT / Math.max(1, ended)), sec(r.meanDuration))}</table>

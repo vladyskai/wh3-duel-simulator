@@ -11,16 +11,28 @@ export const MAX_SWINGS = 3000;
 export const MAX_HITS = 1000;
 const GRID = 4000; // cells used to track accumulated damage when it is random
 
+// The game's own limits on the hit chance, as the player community describes them.
+export const GAME_LIMITS = { lo: 8, hi: 90 }; // percent
+
 // Step 1: one swing is a weighted coin. Probabilities stay between 0 and 1.
-export function hitChance(attack, defence) {
-  return Math.min(1, Math.max(0, (35 + attack - defence) / 100));
+// `limits` = { lo, hi } in percent, or null for no limits beyond 0% and 100%.
+export function hitChance(attack, defence, limits = null) {
+  let p = (35 + attack - defence) / 100;
+  if (limits) p = Math.min(limits.hi / 100, Math.max(limits.lo / 100, p));
+  return Math.min(1, Math.max(0, p));
 }
+
+// The minimum damage of a hit that lands, when that option is on (player-reported rule).
+export const MIN_DAMAGE = 1;
 
 // Step 2: damage of one hit = ap + base * (1 - R), with the armour roll
 // R = min(1, U * armour / 100) and U uniform between 0.5 and 1.
-// Described as: with probability q the base part is fully blocked (0),
-// otherwise the base part is uniform between lo and hi.
-export function hitDamage(base, ap, armour) {
+// With the minimum on: D = max(1, that).
+// Described as a mix of POINTS { v, w } (fixed amounts with their probability) and one
+// UNIFORM part between uLo and uHi with probability uW.
+//   blocked = share of hits whose whole base damage is blocked (armour above 100)
+//   floored = share of hits raised to the minimum
+export function hitDamage(base, ap, armour, minDamage = false) {
   const a = Math.max(0, armour) / 100;
   let q = 0, lo = base, hi = base;
   if (a > 0 && base > 0) {
@@ -28,14 +40,33 @@ export function hitDamage(base, ap, armour) {
     else if (a > 1) { q = 2 * (a - 1) / a; lo = 0; hi = base * (1 - a / 2); }
     else { lo = base * (1 - a); hi = base * (1 - a / 2); }
   }
-  const mean = ap + (1 - q) * (lo + hi) / 2;
-  return { base, ap, q, lo, hi, min: ap + (q > 0 ? 0 : lo), max: ap + (q < 1 ? hi : 0), mean };
+  let points = [], uLo = ap + lo, uHi = ap + hi, uW = 1 - q;
+  if (q > 0) points.push({ v: ap, w: q });
+  if (uW > 0 && uHi - uLo < 1e-9) { points.push({ v: uLo, w: uW }); uW = 0; } // no spread: a point
+  let floored = 0;
+  if (minDamage) {
+    points = points.map((p) => { if (p.v < MIN_DAMAGE) { floored += p.w; return { v: MIN_DAMAGE, w: p.w }; } return p; });
+    if (uW > 0 && uLo < MIN_DAMAGE) {
+      const cut = Math.min(1, (MIN_DAMAGE - uLo) / (uHi - uLo)); // share of the roll below the minimum
+      points.push({ v: MIN_DAMAGE, w: uW * cut }); floored += uW * cut;
+      uLo = MIN_DAMAGE; uW *= 1 - cut;
+      if (uW < 1e-15) uW = 0;
+    }
+    const merged = new Map(); // the same amount twice becomes one point
+    for (const p of points) merged.set(p.v, (merged.get(p.v) || 0) + p.w);
+    points = [...merged].map(([v, w]) => ({ v, w }));
+  }
+  let mean = uW * (uLo + uHi) / 2, min = Infinity, max = -Infinity;
+  for (const p of points) { mean += p.v * p.w; if (p.w > 0) { min = Math.min(min, p.v); max = Math.max(max, p.v); } }
+  if (uW > 0) { min = Math.min(min, uLo); max = Math.max(max, uHi); }
+  return { base, ap, points, uLo, uHi, uW, blocked: q, floored, min, max, mean };
 }
 
 // One random hit, for the simulation.
-export function rollDamage(base, ap, armour, rand) {
+export function rollDamage(base, ap, armour, rand, minDamage = false) {
   const r = Math.min(1, (0.5 + 0.5 * rand()) * Math.max(0, armour) / 100);
-  return ap + base * (1 - r);
+  const d = ap + base * (1 - r);
+  return minDamage ? Math.max(MIN_DAMAGE, d) : d;
 }
 
 // Step 3: hits needed K = the first k with D_1 + ... + D_k >= HP. Returns g[k] = P(K = k).
@@ -44,15 +75,15 @@ export function rollDamage(base, ap, armour, rand) {
 // HP is recorded as P(K = k).
 export function hitsNeededDist(hp, dmg, kMax = MAX_HITS) {
   const g = new Float64Array(kMax + 1);
-  const fixed = dmg.q >= 1 || dmg.hi - dmg.lo < 1e-9;
-  if (fixed) {
-    const d = dmg.q >= 1 ? dmg.ap : dmg.ap + dmg.lo;
+  if (dmg.uW === 0 && dmg.points.length === 1) {
+    const d = dmg.points[0].v;
     if (d > 0) { const k = Math.ceil(hp / d - 1e-12); if (k <= kMax) g[k] = 1; }
     return g;
   }
   const h = hp / GRID;
   let cur = new Float64Array(GRID); cur[0] = 1;
-  const apC = dmg.ap / h, loC = (dmg.ap + dmg.lo) / h, hiC = (dmg.ap + dmg.hi) / h;
+  const pts = dmg.points.filter((p) => p.w > 0).map((p) => ({ c: p.v / h, w: p.w }));
+  const loC = dmg.uLo / h, hiC = dmg.uHi / h;
   for (let k = 1; k <= kMax; k++) {
     const diff = new Float64Array(GRID + 1);
     const nxt = new Float64Array(GRID);
@@ -60,14 +91,13 @@ export function hitsNeededDist(hp, dmg, kMax = MAX_HITS) {
     for (let i = 0; i < GRID; i++) {
       const m = cur[i];
       if (m < 1e-300) continue;
-      if (dmg.q > 0) { // base fully blocked: a point shift by ap
-        const w = m * dmg.q, j = i + apC, j0 = Math.floor(j), f = j - j0;
+      for (const p of pts) { // a fixed amount: a point shift, split between two cells
+        const w = m * p.w, j = i + p.c, j0 = Math.floor(j), f = j - j0;
         if (j0 >= GRID) dead += w;
         else { nxt[j0] += w * (1 - f); if (j0 + 1 >= GRID) dead += w * f; else nxt[j0 + 1] += w * f; }
       }
-      const w = m * (1 - dmg.q); // armour roll: uniform between ap + lo and ap + hi
-      if (w <= 0) continue;
-      const a = i + loC, b = i + hiC;
+      if (dmg.uW <= 0) continue; // the armour roll: spread evenly between uLo and uHi
+      const w = m * dmg.uW, a = i + loC, b = i + hiC;
       if (a >= GRID) { dead += w; continue; }
       const dens = w / (b - a);
       if (b > GRID) dead += dens * (b - GRID);
@@ -149,9 +179,13 @@ function race(fX, x, fY, SY, y, nMax) {
   return { win, tie };
 }
 
-export function duel(A, B, nMax = MAX_SWINGS) {
-  const pA = hitChance(A.attack, B.defence), pB = hitChance(B.attack, A.defence);
-  const dA = hitDamage(A.base, A.ap, B.armour), dB = hitDamage(B.base, B.ap, A.armour);
+// opts.limits = { lo, hi } in percent (the hit chance limits), or null.
+// opts.minDamage = true: every hit that lands does at least MIN_DAMAGE.
+export function duel(A, B, opts = {}, nMax = MAX_SWINGS) {
+  const lim = opts.limits || null;
+  const pA = hitChance(A.attack, B.defence, lim), pB = hitChance(B.attack, A.defence, lim);
+  const md = !!opts.minDamage;
+  const dA = hitDamage(A.base, A.ap, B.armour, md), dB = hitDamage(B.base, B.ap, A.armour, md);
   const gA = hitsNeededDist(B.hp, dA), gB = hitsNeededDist(A.hp, dB);
   const fA = swingsDist(gA, pA, nMax), fB = swingsDist(gB, pB, nMax);
   const { s: SA, total: finA } = survival(fA), { s: SB, total: finB } = survival(fB);
@@ -187,16 +221,17 @@ export function duel(A, B, nMax = MAX_SWINGS) {
 }
 
 // The brute-force check: fight one duel swing by swing.
-export function fightOnce(A, B, rand = Math.random) {
-  const pA = hitChance(A.attack, B.defence), pB = hitChance(B.attack, A.defence);
+export function fightOnce(A, B, rand = Math.random, opts = {}) {
+  const lim = opts.limits || null;
+  const pA = hitChance(A.attack, B.defence, lim), pB = hitChance(B.attack, A.defence, lim);
   let ha = A.hp, hb = B.hp, ta = 0, tb = 0;
   const swings = [];
   for (let i = 0; i < 20000; i++) {
     const t = Math.min(ta, tb), sa = ta === t, sb = tb === t;
     const hitA = sa && rand() < pA, hitB = sb && rand() < pB;
     let dmgA = 0, dmgB = 0;
-    if (hitA) { dmgA = rollDamage(A.base, A.ap, B.armour, rand); hb -= dmgA; }
-    if (hitB) { dmgB = rollDamage(B.base, B.ap, A.armour, rand); ha -= dmgB; }
+    if (hitA) { dmgA = rollDamage(A.base, A.ap, B.armour, rand, !!opts.minDamage); hb -= dmgA; }
+    if (hitB) { dmgB = rollDamage(B.base, B.ap, A.armour, rand, !!opts.minDamage); ha -= dmgB; }
     swings.push({ t, sa, sb, hitA, hitB, dmgA, dmgB, ha: Math.max(0, ha), hb: Math.max(0, hb) });
     if (sa) ta += A.interval;
     if (sb) tb += B.interval;

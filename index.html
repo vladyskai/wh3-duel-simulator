@@ -19,6 +19,17 @@
     <div class="unit" data-side="B"><h2><span class="swatch b"></span>Unit B</h2><div class="ctls"></div></div>
   </section>
 
+  <section class="limits">
+    <label class="check"><input type="checkbox" id="lim-on"> Use the game's hit chance limits</label>
+    <div class="lim-fields" id="lim-fields" hidden>
+      <span class="pair"><label for="lim-lo">Lowest</label><input type="number" id="lim-lo" min="0" max="100" step="1" value="8">%</span>
+      <span class="pair"><label for="lim-hi">Highest</label><input type="number" id="lim-hi" min="0" max="100" step="1" value="90">%</span>
+      <button id="lim-reset" type="button">Restore defaults</button>
+      <span class="err" id="lim-err" role="alert"></span>
+    </div>
+    <label class="check"><input type="checkbox" id="min-on"> Every hit that lands does at least 1 damage</label>
+  </section>
+
   <section class="result">
     <div class="winbar" id="winbar"></div>
     <div class="legend" id="winlegend"></div>
@@ -33,7 +44,10 @@
     <div id="coins" class="bars"></div>
     <details><summary>Formula</summary>
       <div class="tex" data-tex="p_A = \min\!\left(1,\ \max\!\left(0,\ \frac{35 + \mathrm{MA}_A - \mathrm{MD}_B}{100}\right)\right)"></div>
-      <p class="note">A probability cannot leave the range 0 to 1, hence the min and max. The game itself clamps to 8% to 90% (not applied here yet).</p>
+      <p class="note">A probability cannot leave the range 0 to 1, hence the min and max.</p>
+      <p class="note">With the game's limits ticked, the lowest and highest values replace 0 and 1:</p>
+      <div class="tex" data-tex="p_A = \min\!\left(p_{\max},\ \max\!\left(p_{\min},\ \frac{35 + \mathrm{MA}_A - \mathrm{MD}_B}{100}\right)\right), \qquad p_{\min} = 8\%,\ \ p_{\max} = 90\%"></div>
+      <p class="note">So even a hopeless attacker lands 8% of its swings, and even a perfect one misses 10%. The 8% and 90% values are how the player community describes the game. They have not been checked against the engine here.</p>
     </details>
   </section>
 
@@ -45,6 +59,9 @@
       <div class="tex" data-tex="D_A = \mathrm{AP}_A + B_A\,(1 - R), \qquad R = \min\!\left(1,\ U \cdot \frac{\mathrm{Armour}_B}{100}\right), \qquad U \sim \mathrm{Uniform}(0.5,\ 1)"></div>
       <div class="tex" data-tex="\text{armour} \le 100: \quad \mathbb{E}[D_A] = \mathrm{AP}_A + B_A \left(1 - 0.75\,\frac{\mathrm{Armour}_B}{100}\right)"></div>
       <p class="note">U is the armour roll: each hit, armour blocks between half and all of its value, as a percentage of the base damage. Above 100 armour the block is capped at 100%, so some hits lose their whole base damage. This rule is how the player community describes the game. It has not been checked against the engine here.</p>
+      <p class="note">With the minimum damage ticked, a hit that lands never does less than 1:</p>
+      <div class="tex" data-tex="D_A = \max\!\big(1,\ \mathrm{AP}_A + B_A\,(1 - R)\big)"></div>
+      <p class="note">It only matters when armour leaves less than 1 damage, for example a weak weapon against very heavy armour with no armour-piercing. Then a soldier who could never hurt the enemy can win, slowly. Players report this rule. No developer source was found, and it has not been checked against the engine here.</p>
     </details>
   </section>
 
@@ -114,7 +131,7 @@
     <div id="simtable"></div>
   </section>
 
-  <footer>Model version 3: hit chance, attack interval, armour and armour-piercing damage. Next ideas: the game's 8% to 90% hit clamp, bonus vs large and vs infantry, more than one soldier.</footer>
+  <footer>Model version 4: hit chance with optional limits, attack interval, armour and armour-piercing damage, optional 1 damage minimum. Next ideas: bonus vs large and vs infantry, charge, more than one soldier.</footer>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>

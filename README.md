@@ -6,31 +6,20 @@ Who wins a melee duel between two single soldiers in Total War: WARHAMMER III, c
 
 The page explains each step of the model with a chart, and keeps the maths under a "Formula" collapsible. A built-in simulator fights the same duel thousands of times so you can see the exact answer and the brute-force answer agree.
 
-## What the model covers (version 4)
+## What the model covers (version 2)
 
-1. **Hit chance**: 35 + melee attack minus the enemy's melee defence, as a percentage, kept between 0% and 100%. A checkbox applies the game's limits instead (8% to 90% by default, both editable, with a button to restore the defaults).
-2. **Damage per hit**: armour-piercing damage always lands. Armour blocks a random share of the base damage on each hit, between half and all of the armour value as a percentage, capped at 100%. A checkbox applies a minimum of 1 damage per hit that lands.
-3. **Hits needed**: the number of random hits that add up to the enemy's hit points, computed as a distribution.
-4. **Swings needed**: a mixture of negative binomial distributions, one per possible number of hits.
-5. **Attack interval**: each soldier swings at t = 0 and then once per interval.
-6. **The race**: the exact chance that A wins, that B wins, or that both die at the same instant.
-7. **Fight length**: the average time until the first killing blow.
+1. **Hit chance**: 35 + melee attack minus the enemy's melee defence, as a percentage, kept between 0% and 100%.
+2. **Hits needed**: the enemy's hit points divided by the damage per hit, rounded up.
+3. **Swings needed**: the negative binomial distribution (swings until the k-th hit).
+4. **Attack interval**: each soldier swings at t = 0 and then once per interval.
+5. **The race**: the exact chance that A wins, that B wins, or that both die at the same instant.
+6. **Fight length**: the average time until the first killing blow.
 
-The armour rule, the 8% to 90% limits and the 1 damage minimum are how players describe the game. None of them has been checked against the engine yet, which is why the last two are optional.
+This is a deliberately small version, kept simple for study.
 
-Not covered yet: charge, bonus vs large or vs infantry, morale, more than one soldier per unit.
+## The fuller model (saved)
 
-## Unit against unit (version 6, `unit.html`)
-
-Many soldiers per side, with front lines (only the front line fights and the ranks behind step in, with the depth taken from the game's `land_units.rank_depth`, 4 to 8 ranks for most infantry) and splash (one swing can target several soldiers and splits its damage between them, as players describe the game's `splash_attack_max_attacks`). Three tools:
-
-1. **Lanchester's equations**: the average fight as smooth curves, and the square law (strength = kill rate x soldiers squared).
-2. **A Markov chain on the head counts**: the odds of every ending. Each soldier counts as several Erlang stages so the chain's randomness matches the real time to kill (the plain memoryless chain is shown for comparison).
-3. **A soldier-by-soldier simulation**: the referee. With one soldier per side and no stagger it reproduces the duel model exactly.
-
-How soldiers pick their targets is not documented, so the page offers two rules: keep the target until it dies, or hit a random enemy each swing. Morale and charge are not modelled yet.
-
-Measured accuracy of the fast tools against the simulation (`node check/test_units.mjs`): the corrected chain gets the favourite right and usually lands within the gap between the two targeting rules, but it overestimates fight length by about 30% in close fights. Lanchester calls close fights with false certainty and fails with very few soldiers (a single monster).
+A later version is saved on the branch [`full-model`](https://github.com/vladyskai/wh3-duel-simulator/tree/full-model) (tag `v6-full-model`). It adds armour and armour-piercing damage, the game's hit chance limits, a 1 damage minimum, and a second page for unit against unit fights (splash attacks, front lines, Lanchester's equations, a Markov chain and a soldier-by-soldier simulation). To run it: `git checkout full-model`.
 
 ## Run it locally
 
@@ -46,10 +35,9 @@ Then open http://localhost:8766. The formula and chart libraries load from a CDN
 
 ```
 node check/test_model.mjs
-node check/test_units.mjs
 ```
 
-The tests check that the model with no armour reproduces the earlier version exactly, and that with armour it matches 100,000 simulated duels per case. `check/duel_check.py` is the original Python version of the model without armour.
+The tests check the exact model against the numbers of `check/duel_check.py` (the Python version) and against 100,000 simulated duels per case, fight length included.
 
 ## Layout
 
@@ -59,5 +47,4 @@ The tests check that the model with no armour reproduces the earlier version exa
 | `css/style.css` | the look, light and dark |
 | `js/model.js` | the model: pure maths, no page code |
 | `js/app.js` | sliders, charts and the simulator |
-| `unit.html`, `js/unit_model.js`, `js/unit_app.js` | the unit page and its three tools |
 | `check/` | tests and the Python reference |

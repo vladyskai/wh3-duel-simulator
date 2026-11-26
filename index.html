@@ -9,26 +9,28 @@
 </head>
 <body>
 <main>
-  <nav class="tabs"><a href="index.html" aria-current="page">One soldier against one</a><a href="unit.html">Unit against unit</a></nav>
   <header>
     <h1>WH3 duel simulator</h1>
     <p class="lede">Who wins a melee duel between two single soldiers, computed exactly from their stats, without simulating the fight.</p>
   </header>
 
   <section class="units">
-    <div class="unit" data-side="A"><h2><span class="swatch a"></span>Unit A</h2><div class="ctls"></div></div>
-    <div class="unit" data-side="B"><h2><span class="swatch b"></span>Unit B</h2><div class="ctls"></div></div>
-  </section>
-
-  <section class="limits">
-    <label class="check"><input type="checkbox" id="lim-on"> Use the game's hit chance limits</label>
-    <div class="lim-fields" id="lim-fields" hidden>
-      <span class="pair"><label for="lim-lo">Lowest</label><input type="number" id="lim-lo" min="0" max="100" step="1" value="8">%</span>
-      <span class="pair"><label for="lim-hi">Highest</label><input type="number" id="lim-hi" min="0" max="100" step="1" value="90">%</span>
-      <button id="lim-reset" type="button">Restore defaults</button>
-      <span class="err" id="lim-err" role="alert"></span>
+    <div class="unit" data-side="A">
+      <h2><span class="swatch a"></span>Unit A</h2>
+      <div class="ctl"><label for="A-attack">Melee attack</label><input type="range" id="A-attack" min="0" max="100" step="1" value="45"><output for="A-attack"></output></div>
+      <div class="ctl"><label for="A-defence">Melee defence</label><input type="range" id="A-defence" min="0" max="100" step="1" value="25"><output for="A-defence"></output></div>
+      <div class="ctl"><label for="A-damage">Damage per hit</label><input type="range" id="A-damage" min="1" max="200" step="1" value="25"><output for="A-damage"></output></div>
+      <div class="ctl"><label for="A-hp">Hit points</label><input type="range" id="A-hp" min="1" max="500" step="1" value="100"><output for="A-hp"></output></div>
+      <div class="ctl"><label for="A-interval">Attack interval</label><input type="range" id="A-interval" min="20" max="60" step="1" value="40"><output for="A-interval"></output></div>
     </div>
-    <label class="check"><input type="checkbox" id="min-on"> Every hit that lands does at least 1 damage</label>
+    <div class="unit" data-side="B">
+      <h2><span class="swatch b"></span>Unit B</h2>
+      <div class="ctl"><label for="B-attack">Melee attack</label><input type="range" id="B-attack" min="0" max="100" step="1" value="30"><output for="B-attack"></output></div>
+      <div class="ctl"><label for="B-defence">Melee defence</label><input type="range" id="B-defence" min="0" max="100" step="1" value="30"><output for="B-defence"></output></div>
+      <div class="ctl"><label for="B-damage">Damage per hit</label><input type="range" id="B-damage" min="1" max="200" step="1" value="40"><output for="B-damage"></output></div>
+      <div class="ctl"><label for="B-hp">Hit points</label><input type="range" id="B-hp" min="1" max="500" step="1" value="120"><output for="B-hp"></output></div>
+      <div class="ctl"><label for="B-interval">Attack interval</label><input type="range" id="B-interval" min="20" max="60" step="1" value="43"><output for="B-interval"></output></div>
+    </div>
   </section>
 
   <section class="result">
@@ -42,56 +44,37 @@
   <section class="step">
     <h3>1. One swing is a weighted coin</h3>
     <p>Every swing hits or misses. Only the gap between the attacker's attack and the defender's defence matters.</p>
-    <div id="coins" class="bars"></div>
+    <div id="coins"></div>
     <details><summary>Formula</summary>
       <div class="tex" data-tex="p_A = \min\!\left(1,\ \max\!\left(0,\ \frac{35 + \mathrm{MA}_A - \mathrm{MD}_B}{100}\right)\right)"></div>
-      <p class="note">A probability cannot leave the range 0 to 1, hence the min and max.</p>
-      <p class="note">With the game's limits ticked, the lowest and highest values replace 0 and 1:</p>
-      <div class="tex" data-tex="p_A = \min\!\left(p_{\max},\ \max\!\left(p_{\min},\ \frac{35 + \mathrm{MA}_A - \mathrm{MD}_B}{100}\right)\right), \qquad p_{\min} = 8\%,\ \ p_{\max} = 90\%"></div>
-      <p class="note">So even a hopeless attacker lands 8% of its swings, and even a perfect one misses 10%. The 8% and 90% values are how the player community describes the game. They have not been checked against the engine here.</p>
+      <p class="note">A probability cannot leave the range 0 to 1, hence the min and max. The game itself clamps to 8% to 90% (not applied here).</p>
     </details>
   </section>
 
   <section class="step">
-    <h3>2. Damage per hit is random</h3>
-    <p>Armour-piercing damage always lands in full. Armour blocks a random share of the base damage on every hit. The solid part is guaranteed, the striped part is the armour roll, the tick is the average.</p>
-    <div id="damage" class="bars"></div>
+    <h3>2. Hits needed is a fixed number</h3>
+    <p>Hit points and damage only matter through this count. Each block is one hit.</p>
+    <div id="hits"></div>
     <details><summary>Formula</summary>
-      <div class="tex" data-tex="D_A = \mathrm{AP}_A + B_A\,(1 - R), \qquad R = \min\!\left(1,\ U \cdot \frac{\mathrm{Armour}_B}{100}\right), \qquad U \sim \mathrm{Uniform}(0.5,\ 1)"></div>
-      <div class="tex" data-tex="\text{armour} \le 100: \quad \mathbb{E}[D_A] = \mathrm{AP}_A + B_A \left(1 - 0.75\,\frac{\mathrm{Armour}_B}{100}\right)"></div>
-      <p class="note">U is the armour roll: each hit, armour blocks between half and all of its value, as a percentage of the base damage. Above 100 armour the block is capped at 100%, so some hits lose their whole base damage. This rule is how the player community describes the game. It has not been checked against the engine here.</p>
-      <p class="note">With the minimum damage ticked, a hit that lands never does less than 1:</p>
-      <div class="tex" data-tex="D_A = \max\!\big(1,\ \mathrm{AP}_A + B_A\,(1 - R)\big)"></div>
-      <p class="note">It only matters when armour leaves less than 1 damage, for example a weak weapon against very heavy armour with no armour-piercing. Then a soldier who could never hurt the enemy can win, slowly. Players report this rule. No developer source was found, and it has not been checked against the engine here.</p>
+      <div class="tex" data-tex="k_A = \left\lceil \frac{\mathrm{HP}_B}{D_A} \right\rceil"></div>
+      <p class="note">The brackets mean "round up": 120 HP at 25 damage needs 5 hits, not 4.8.</p>
     </details>
   </section>
 
   <section class="step">
-    <h3>3. Hits needed is now random too</h3>
-    <p>Keep adding random hits until they reach the enemy's hit points. The count of hits is no longer a fixed number but a distribution.</p>
-    <div class="legend" id="hitlegend"></div>
-    <div class="chart"><canvas id="hitchart" role="img" aria-label="Probability of needing k hits, unit A and unit B"></canvas></div>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="K_A = \min\{\,k : D_1 + D_2 + \dots + D_k \ge \mathrm{HP}_B\,\}"></div>
-      <div class="tex" data-tex="P(K_A \le k) = P\big(D_1 + \dots + D_k \ge \mathrm{HP}_B\big)"></div>
-      <p class="note">The sum of k random hits has its own distribution: the convolution of k copies of one hit's distribution. The page computes it numerically, one hit at a time. With no armour every hit is the same and this falls back to the old rule, k = HP / D rounded up.</p>
-    </details>
-  </section>
-
-  <section class="step">
-    <h3>4. Swings needed: a mixture</h3>
-    <p>For each possible number of hits, the swings follow a negative binomial, as before. The real distribution blends them, weighted by how likely each number of hits is. Dashed lines mark the means.</p>
+    <h3>3. Swings needed is random</h3>
+    <p>Count the swings until the k-th hit. That count follows the negative binomial distribution. Dashed lines mark the means.</p>
     <div class="legend" id="swinglegend"></div>
     <div class="chart"><canvas id="swingchart" role="img" aria-label="Probability of finishing on each swing, unit A and unit B"></canvas></div>
     <details><summary>Formula</summary>
-      <div class="tex" data-tex="P(N_A = n) = \sum_{k} P(K_A = k)\, \binom{n-1}{k-1}\, p_A^{\,k}\,(1-p_A)^{\,n-k}"></div>
-      <div class="tex" data-tex="\mathbb{E}[N_A] = \frac{\mathbb{E}[K_A]}{p_A}, \qquad \mathrm{Var}(N_A) = \frac{\mathbb{E}[K_A]\,(1-p_A)}{p_A^2} + \frac{\mathrm{Var}(K_A)}{p_A^2}"></div>
-      <p class="note">The variance splits in two (the law of total variance): the luck of hitting or missing, plus the luck of the armour rolls. The hit-or-miss coin and the armour roll are independent.</p>
+      <div class="tex" data-tex="P(N_A = n) = \binom{n-1}{k_A-1}\, p_A^{\,k_A}\,(1-p_A)^{\,n-k_A}, \qquad n \ge k_A"></div>
+      <div class="tex" data-tex="\mathbb{E}[N_A] = \frac{k_A}{p_A}, \qquad \mathrm{sd}(N_A) = \frac{\sqrt{k_A(1-p_A)}}{p_A}"></div>
+      <p class="note">The last swing must be a hit (one factor p). The n&minus;1 swings before it hold exactly k&minus;1 hits in any order (the binomial coefficient).</p>
     </details>
   </section>
 
   <section class="step">
-    <h3>5. Swings become a time</h3>
+    <h3>4. Swings become a time</h3>
     <p>Both soldiers swing first at t = 0, then once per attack interval. A slower soldier's curve is stretched to the right.</p>
     <div class="legend" id="timelegend"></div>
     <div class="chart"><canvas id="timechart" role="img" aria-label="Probability of landing the killing blow at each moment, in seconds"></canvas></div>
@@ -102,19 +85,19 @@
   </section>
 
   <section class="step">
-    <h3>6. The race</h3>
+    <h3>5. The race</h3>
     <p>For each moment A could land its killing blow, take the chance that B has not finished yet. Add them up.</p>
     <details><summary>Formula</summary>
       <div class="tex" data-tex="m(n) = \left\lfloor \frac{a\,(n-1)}{b} \right\rfloor + 1"></div>
       <p class="note">m(n) is how many swings B has made by the time A's n-th swing lands.</p>
-      <div class="tex" data-tex="P(A \text{ wins}) = \sum_{n} P(N_A = n)\; P\big(N_B > m(n)\big)"></div>
+      <div class="tex" data-tex="P(A \text{ wins}) = \sum_{n \ge k_A} P(N_A = n)\; P\big(N_B > m(n)\big)"></div>
       <div class="tex" data-tex="P(\text{both die}) = \sum_{n \,:\, b \text{ divides } a(n-1)} P(N_A = n)\; P\big(N_B = m(n)\big)"></div>
       <p class="note">Both die only when B swings at exactly the same instant and that swing is B's killing blow.</p>
     </details>
   </section>
 
   <section class="step">
-    <h3>7. How long the fight lasts</h3>
+    <h3>6. How long the fight lasts</h3>
     <p>The fight ends at the first killing blow. It is still going at time t only if both soldiers are still standing.</p>
     <details><summary>Formula</summary>
       <div class="tex" data-tex="T = \min(T_A, T_B), \qquad P(T > t) = P(T_A > t)\,P(T_B > t)"></div>
@@ -132,7 +115,7 @@
     <div id="simtable"></div>
   </section>
 
-  <footer>Model version 4: hit chance with optional limits, attack interval, armour and armour-piercing damage, optional 1 damage minimum. Next ideas: bonus vs large and vs infantry, charge, more than one soldier.</footer>
+  <footer>Model version 2: hit chance, hits needed, attack interval.</footer>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>

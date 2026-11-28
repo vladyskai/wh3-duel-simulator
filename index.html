@@ -6,119 +6,246 @@
 <title>WH3 duel simulator: one soldier against one soldier</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <link rel="stylesheet" href="css/style.css">
+<script>
+  // If the page's code fails to start (most often: the browser mixed new files with old
+  // copies it kept), say so on screen instead of leaving a half-built page.
+  window.addEventListener('error', function (e) {
+    var b = document.getElementById('loadfail');
+    // A script error, or the page's own code file failing to load. Not other files (the
+    // formula library from the internet is optional: the formulas then show as text).
+    var t = e.target, ownFile = t && t.tagName === 'SCRIPT' && t.type === 'module';
+    if (!b || !(e instanceof ErrorEvent || ownFile)) return;
+    b.hidden = false;
+    b.querySelector('code').textContent = e.message || 'a file could not be loaded';
+  }, true);
+</script>
 </head>
-<body>
-<main>
-  <header>
-    <h1>WH3 duel simulator</h1>
-    <p class="lede">Who wins a melee duel between two single soldiers, computed exactly from their stats, without simulating the fight.</p>
+<body class="mappage">
+<div id="loadfail" class="loadfail" role="alert" hidden><b>The page did not start.</b> Press <b>Ctrl+F5</b> to reload every file. If it still fails, the message was: <code></code></div>
+<!-- The whole site is one endless canvas. js/site.js places every card beside the band of the
+     map it explains. data-from / data-upto = the stages of the model in which an element shows. -->
+<div id="canvas" class="canvas full">
+  <div id="world" class="world">
+    <svg id="mapsvg" class="mapsvg" role="img" aria-label="The whole model as one map, from the stats to the result">
+      <defs><marker id="wmarr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+      <g id="wholeworld"></g>
+    </svg>
+
+    <section class="card" id="card-title">
+      <h1>WH3 duel simulator</h1>
+      <p class="lede">Who wins a melee duel between two single soldiers, computed exactly from their stats, without simulating the fight.</p>
+      <p class="stageline" id="stageline"></p>
+      <p class="note" data-from="6">Stage 6 is the card to the left of this one. Everything below is still the duel between one soldier of each unit (stage 5): the unit fight is built from those swings.</p>
+      <div data-from="3">
+        <div class="winbar" id="winbar"></div>
+        <div class="legend" id="winlegend"></div>
+      </div>
+      <p class="duration" id="duration"></p>
+      <h4>Finding your way</h4>
+      <p class="note">This page is one endless canvas. Drag to move, scroll or pinch to zoom, or use <b>Jump to</b> at the top right. The stats are in the floating window, with the <b>stage</b> of the model at its top: stage 1 is the simplest, stage 5 the full one-soldier duel, stage 6 whole units. Change anything and the whole canvas follows at once. <b>Model inputs</b> (top right) lists the numbers the model really needs. The map below runs every step from top to bottom: the left column is A hitting B, the right column (from stage 3) is B hitting A, and they meet in the race at the bottom. Each step's explanation sits to the left of its band.</p>
+      <h4>Reading the pictures</h4>
+      <p class="note">The vertical axis is always a chance. Bars are whole numbers: the height of a bar is the chance of that exact value, and all the bars add up to 100%. A flat block is a value spread evenly over a range: its height is the chance per small step (per 0.1, per 1% or per damage point), so its area, steps times height, is its chance. An arrow is one exact value: it has no width, so its chance is written beside it instead of read on the axis. The pills with a dashed line are the stats, joined to the arrow that uses them.</p>
+    </section>
+
+    <section class="card" id="card-unit" data-from="6">
+      <h3>Unit against unit</h3>
+      <p>Each side is now a whole unit: many soldiers in a formation. This part is a simulation, not exact maths: the page fights the battle many times, swing by swing, with a rule measured in the game.</p>
+      <div id="unitresult"></div>
+      <div class="buttons"><button id="unit-again">Fight them again</button></div>
+      <p class="note">"Fight them again" plays new fights with the same stats: the numbers wobble a little, as they would in the game.</p>
+      <h4>The rule</h4>
+      <div id="unitrule"></div>
+      <h4>What is simplified</h4>
+      <ul class="note">
+        <li>The rule was measured on Empire Swordsmen and four variants of them (60 and 160 soldiers, +15 attack and defence, twice the health), 10 to 40 files wide. For other units it is an extrapolation.</li>
+        <li>Fights go to the last soldier. No morale: nobody wavers or routs.</li>
+        <li>No charge, no fatigue, no experience. Both units stand face to face from the first second.</li>
+        <li>No flank or rear attack, apart from the wrap of a wider unit, which rests on 6 measured fights.</li>
+        <li>One target per swing: no splash attacks. No bonus against infantry or large targets. No terrain.</li>
+        <li>One soldier per model: no cavalry, monsters or single entities.</li>
+      </ul>
+      <h4>How close it is to the game</h4>
+      <p class="note">Against 60 logged fights in 11 match-ups: the winner is right every time, the length of the fight is within 20%, the wounds carried by the living within about 10%. The winner's soldiers left are within 25%, usually on the low side (the model's winner keeps 10 to 20% fewer soldiers than the game's). Details: <code>docs/unit_battle_research.md</code>, <code>check/unit_rule_check.mjs</code>.</p>
+    </section>
+
+    <section class="card" id="card-1">
+      <h3>1. One swing is a weighted coin</h3>
+      <p>Every swing hits or misses. Only the gap between the attacker's attack and the defender's defence matters.</p>
+      <div id="coins" class="bars"></div>
+      <details><summary>Formula</summary>
+        <div class="tex" data-tex="p_A = \min\!\left(1,\ \max\!\left(0,\ \frac{35 + \mathrm{MA}_A - \mathrm{MD}_B}{100}\right)\right)"></div>
+        <p class="note">A probability cannot leave the range 0 to 1, hence the min and max. The game itself keeps the hit chance between 8% and 90% (confirmed by Creative Assembly), not applied here yet.</p>
+      </details>
+    </section>
+
+    <section class="card" id="card-2">
+      <div data-upto="3">
+        <h3>2. Damage of one hit</h3>
+        <p>Until stage 4 there is no armour, so every hit does exactly its damage per hit. Nothing is random here yet.</p>
+      </div>
+      <div data-from="4">
+        <h3>2. Damage per hit is random</h3>
+        <p data-upto="4">Armour blocks a random share of the damage on every hit.</p>
+        <p data-from="5">Armour-piercing damage always lands in full. Armour blocks a random share of the base damage on every hit.</p>
+        <p>The chart is the chance that one hit does exactly that much damage. Dashed lines mark the averages. The pictures to the right follow one hit from the armour roll U to the damage D: each arrow is one operation of the formula, with the numbers of the current stats.</p>
+      </div>
+      <div class="legend" id="dmglegend"></div><div id="dmgchart"></div>
+      <details><summary>Formula</summary>
+        <div data-upto="3"><div class="tex" data-tex="D_A = \text{damage per hit of } A"></div></div>
+        <div data-from="4">
+          <div data-upto="4"><div class="tex" data-tex="D_A = \mathrm{round}\big(B_A\,(1 - R)\big)"></div></div>
+          <div data-from="5"><div class="tex" data-tex="D_A = \mathrm{round}(\mathrm{AP}_A) + \mathrm{round}\big(B_A\,(1 - R)\big)"></div></div>
+          <div class="tex" data-tex="R = \min\!\left(1,\ U \cdot \frac{\mathrm{Armour}_B}{100}\right), \qquad U \sim \mathrm{Uniform}(0.5,\ 1)"></div>
+          <p class="note">U is the armour roll: each hit, armour blocks between half and all of its value, as a percentage of the base damage. Above 100 armour the block is capped at 100%, so some hits lose their whole base damage. The game rounds the parts separately, at the end, and there is no minimum damage. These rules come from Creative Assembly's article <a href="https://www.totalwar.com/news/feature-focus-2-damage-part-1">Feature Focus #2: Damage</a> (2023).</p>
+          <div class="tex" data-tex="P(D_A = \mathrm{AP}_A + j) = \frac{\text{length of } [\ell, h] \cap [\,j - 0.5,\ j + 0.5)}{h - \ell}"></div>
+          <p class="note">With armour up to 100, the base part before rounding is spread evenly between &#8467; = B(1 &minus; armour/100) and h = B(1 &minus; armour/200). Each whole number j gets the share of that range which rounds to it. Example: 9 base, 1 AP against 100 armour. The base part lies between 0 and 4.5, so the hit does 1 damage with chance 1/9 and 2, 3, 4 or 5 with chance 2/9 each. Before stage 5 the AP part is 0.</p>
+          <div class="tex" data-tex="\text{armour} \le 100: \quad \mathbb{E}[D_A] \approx \mathrm{AP}_A + B_A \left(1 - 0.75\,\frac{\mathrm{Armour}_B}{100}\right)"></div>
+          <p class="note">The average before rounding. Rounding moves it by less than half a point.</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="card" id="card-3">
+      <div data-upto="3">
+        <h3>3. Hits needed</h3>
+        <p>Every hit does the same damage, so the hits needed is a plain number: divide the hit points by the damage and round up. Hit points and damage only count through this one number.</p>
+      </div>
+      <div data-from="4">
+        <h3>3. Hits needed is now random too</h3>
+        <p>Keep adding random hits until they reach the enemy's hit points. The count of hits is no longer a fixed number but a distribution.</p>
+        <p class="note">To the right: the total after k hits is a pile of possible totals, and the part of the pile past the hit points (in colour) is the chance the enemy is dead by hit k. The differences between those chances give the hits needed. The three totals shown are the ones around the middle of the fight.</p>
+      </div>
+      <div class="legend" id="hitlegend"></div><div id="hitchart"></div>
+      <details><summary>Formula</summary>
+        <div data-upto="3"><div class="tex" data-tex="K_A = \left\lceil \frac{\mathrm{HP}_B}{D_A} \right\rceil"></div></div>
+        <div data-from="4">
+          <div class="tex" data-tex="K_A = \min\{\,k : D_1 + D_2 + \dots + D_k \ge \mathrm{HP}_B\,\}"></div>
+          <div class="tex" data-tex="P(K_A \le k) = P\big(D_1 + \dots + D_k \ge \mathrm{HP}_B\big)"></div>
+          <p class="note">The sum of k random hits has its own distribution: the convolution of k copies of one hit's distribution. Because every hit does a whole number of damage, the page computes it exactly, one hit at a time: it tracks the chance of having taken 0, 1, 2 ... damage so far, and whatever reaches the hit points on hit k is P(K = k). With no armour every hit is the same and this falls back to K = HP / D rounded up.</p>
+          <div class="tex" data-tex="S_k(s) = \sum_{d} S_{k-1}(s - d)\,P(D = d), \qquad P(K = k) = \sum_{s < \mathrm{HP}} S_{k-1}(s)\, P(D \ge \mathrm{HP} - s)"></div>
+          <p class="note">S<sub>k</sub>(s) is the chance that after k hits the defender has taken exactly s damage and is still standing (s below the hit points).</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="card" id="card-4">
+      <div data-upto="3">
+        <h3>4. Swings needed: a negative binomial</h3>
+        <p>Flip the hit coin until it has come up "hit" K times. The number of flips this takes is a negative binomial. Dashed lines mark the means.</p>
+      </div>
+      <div data-from="4">
+        <h3>4. Swings needed: a mixture</h3>
+        <p>For each possible number of hits, the swings follow a negative binomial. The real distribution blends them, weighted by how likely each number of hits is. Dashed lines mark the means.</p>
+        <p class="note">To the right: the negative binomials for the three most likely numbers of hits, then every curve shrunk by the chance of its k, then all of them added up.</p>
+      </div>
+      <div class="legend" id="swinglegend"></div><div id="swingchart"></div>
+      <details><summary>Formula</summary>
+        <div data-upto="3">
+          <div class="tex" data-tex="P(N_A = n) = \binom{n-1}{K_A-1}\, p_A^{\,K_A}\,(1-p_A)^{\,n-K_A}, \qquad n \ge K_A"></div>
+          <div class="tex" data-tex="\mathbb{E}[N_A] = \frac{K_A}{p_A}, \qquad \mathrm{Var}(N_A) = \frac{K_A\,(1-p_A)}{p_A^2}"></div>
+          <p class="note">The last swing is always a hit: before it, K &minus; 1 hits are spread among n &minus; 1 swings in any order, hence the binomial coefficient.</p>
+        </div>
+        <div data-from="4">
+          <div class="tex" data-tex="P(N_A = n) = \sum_{k} P(K_A = k)\, \binom{n-1}{k-1}\, p_A^{\,k}\,(1-p_A)^{\,n-k}"></div>
+          <div class="tex" data-tex="\mathbb{E}[N_A] = \frac{\mathbb{E}[K_A]}{p_A}, \qquad \mathrm{Var}(N_A) = \frac{\mathbb{E}[K_A]\,(1-p_A)}{p_A^2} + \frac{\mathrm{Var}(K_A)}{p_A^2}"></div>
+          <p class="note">The variance splits in two (the law of total variance): the luck of hitting or missing, plus the luck of the armour rolls. The hit-or-miss coin and the armour roll are independent.</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="card" id="card-5" data-from="2">
+      <h3>5. Swings become a time</h3>
+      <p>The first swing lands at t = 0, then one more every attack interval.<span data-from="3"> A slower soldier's curve is stretched to the right.</span></p>
+      <div class="legend" id="timelegend"></div>
+      <div id="timechart"></div>
+      <details><summary>Formula</summary>
+        <div class="tex" data-tex="T_A = a\,(N_A - 1)"></div>
+        <p class="note">a is A's attack interval<span data-from="3">, b is B's</span>. Swing 1 lands at t = 0, swing n at t = a(n&minus;1).</p>
+      </details>
+    </section>
+
+    <section class="card" id="card-67" data-from="3">
+      <h3>6. The race</h3>
+      <p>For each moment A could land its killing blow, take the chance that B has not finished yet. Add them up.</p>
+      <details><summary>Formula</summary>
+        <div class="tex" data-tex="m(n) = \left\lfloor \frac{a\,(n-1)}{b} \right\rfloor + 1"></div>
+        <p class="note">m(n) is how many swings B has made by the time A's n-th swing lands. Only the ratio a/b appears, so the two intervals decide the winner only through their ratio.</p>
+        <div class="tex" data-tex="P(A \text{ wins}) = \sum_{n} P(N_A = n)\; P\big(N_B > m(n)\big)"></div>
+        <div class="tex" data-tex="P(\text{both die}) = \sum_{n \,:\, b \text{ divides } a(n-1)} P(N_A = n)\; P\big(N_B = m(n)\big)"></div>
+        <p class="note">Both die only when B swings at exactly the same instant and that swing is B's killing blow.</p>
+      </details>
+      <h3 class="second">7. How long the fight lasts</h3>
+      <p>The fight ends at the first killing blow. It is still going at time t only if both soldiers are still standing.</p>
+      <details><summary>Formula</summary>
+        <div class="tex" data-tex="T = \min(T_A, T_B), \qquad P(T > t) = P(T_A > t)\,P(T_B > t)"></div>
+        <div class="tex" data-tex="\mathbb{E}[T] = \int_0^\infty P(T > t)\,dt"></div>
+        <p class="note">The two soldiers' luck is independent, so the chances multiply.</p>
+      </details>
+    </section>
+
+    <section class="card" id="card-sim" data-from="3">
+      <h3>Check it by simulation</h3>
+      <p>Fight one duel swing by swing, or many, and compare with the exact numbers.</p>
+      <div class="buttons"><button id="one">Fight one duel</button><button id="many">Simulate 10,000 duels</button></div>
+      <div id="replay"></div>
+      <div id="simtable"></div>
+      <p class="note">Model version 3: hit chance, attack interval, armour and armour-piercing damage, rounded per part as the game does, no minimum damage. Sources: <a href="https://github.com/vladyskai/wh3-duel-simulator/blob/main/docs/game_rules.md">game rules</a>.</p>
+    </section>
+  </div>
+</div>
+
+<nav class="toolbar" aria-label="Canvas controls">
+  <select id="jump" aria-label="Jump to a part of the canvas">
+    <option value="">Jump to&hellip;</option>
+    <option value="start">Start</option>
+    <option value="unit">Unit against unit</option>
+    <option value="coin">1. One swing</option>
+    <option value="dmg">2. Damage of one hit</option>
+    <option value="hits">3. Hits needed</option>
+    <option value="swings">4. Swings needed</option>
+    <option value="time">5. Time</option>
+    <option value="race">6 and 7. Race and result</option>
+  </select>
+  <button id="w-inputs" aria-pressed="false">Model inputs</button>
+  <button id="w-fit" title="Show everything (key 0)">Fit</button>
+  <button id="w-in" aria-label="Zoom in" title="Zoom in (key +)">+</button>
+  <button id="w-out" aria-label="Zoom out" title="Zoom out (key -)">&minus;</button>
+  <button id="w-full">Full screen</button>
+</nav>
+
+<aside id="stats" class="floating" aria-label="Stats">
+  <header id="stats-head" title="Drag to move this window">
+    <b>Stats</b><span id="stats-result" class="stats-result"></span>
+    <button id="stats-hide" title="Hide the stats window">Hide</button>
   </header>
-
-  <section class="units">
-    <div class="unit" data-side="A">
-      <h2><span class="swatch a"></span>Unit A</h2>
-      <div class="ctl"><label for="A-attack">Melee attack</label><input type="range" id="A-attack" min="0" max="100" step="1" value="45"><output for="A-attack"></output></div>
-      <div class="ctl"><label for="A-defence">Melee defence</label><input type="range" id="A-defence" min="0" max="100" step="1" value="25"><output for="A-defence"></output></div>
-      <div class="ctl"><label for="A-damage">Damage per hit</label><input type="range" id="A-damage" min="1" max="200" step="1" value="25"><output for="A-damage"></output></div>
-      <div class="ctl"><label for="A-hp">Hit points</label><input type="range" id="A-hp" min="1" max="500" step="1" value="100"><output for="A-hp"></output></div>
-      <div class="ctl"><label for="A-interval">Attack interval</label><input type="range" id="A-interval" min="20" max="60" step="1" value="40"><output for="A-interval"></output></div>
+  <div class="floating-body">
+    <div class="stagepick">
+      <span class="stagelabel">Model stage</span>
+      <span class="stagebtns" role="group" aria-label="Model stage">
+        <button data-stage="1" title="One attacker">1</button><button data-stage="2" title="Time">2</button><button data-stage="3" title="Both fight">3</button><button data-stage="4" title="Armour">4</button><button data-stage="5" title="Armour-piercing: the full duel">5</button><button data-stage="6" title="Units: many soldiers per side">6</button>
+      </span>
     </div>
-    <div class="unit" data-side="B">
-      <h2><span class="swatch b"></span>Unit B</h2>
-      <div class="ctl"><label for="B-attack">Melee attack</label><input type="range" id="B-attack" min="0" max="100" step="1" value="30"><output for="B-attack"></output></div>
-      <div class="ctl"><label for="B-defence">Melee defence</label><input type="range" id="B-defence" min="0" max="100" step="1" value="30"><output for="B-defence"></output></div>
-      <div class="ctl"><label for="B-damage">Damage per hit</label><input type="range" id="B-damage" min="1" max="200" step="1" value="40"><output for="B-damage"></output></div>
-      <div class="ctl"><label for="B-hp">Hit points</label><input type="range" id="B-hp" min="1" max="500" step="1" value="120"><output for="B-hp"></output></div>
-      <div class="ctl"><label for="B-interval">Attack interval</label><input type="range" id="B-interval" min="20" max="60" step="1" value="43"><output for="B-interval"></output></div>
-    </div>
-  </section>
+    <p class="note stagedesc" id="stagedesc"></p>
+    <div class="unit" data-side="A"><h2><span class="swatch a"></span>Unit A</h2><div class="ctls-head"><span></span><span></span><span>value</span><span>+1 gain</span></div><div class="ctls"></div></div>
+    <div class="unit" data-side="B"><h2><span class="swatch b"></span>Unit B</h2><div class="ctls-head"><span></span><span></span><span>value</span><span>+1 gain</span></div><div class="ctls"></div></div>
+    <div class="buttons"><button id="stats-reset">Reset to the defaults</button></div>
+    <p class="note" data-from="6">Soldiers and width describe the unit (stage 6). The gain column is still about one soldier against one soldier.</p>
+    <p class="note" data-from="3">The gain column: how many points that unit's win chance goes up with one more point of the stat (0.1 s faster for the interval). The brightest slider in each unit is the best single point to add. Hover a number for the exact value. A point of hit points and a point of melee attack are not equally easy to get in the game, so compare with that in mind.</p>
+    <p class="note" data-upto="2">The gains start at stage 3: before that B never strikes back, so nobody wins or loses.</p>
+  </div>
+</aside>
+<button id="stats-show" class="floating-show" hidden>Show stats</button>
 
-  <section class="result">
-    <div class="winbar" id="winbar"></div>
-    <div class="legend" id="winlegend"></div>
-    <p class="duration" id="duration"></p>
-  </section>
+<aside id="inputs" class="floating inputs" aria-label="Model inputs" hidden>
+  <header id="inputs-head" title="Drag to move this window">
+    <b>Model inputs</b><span class="stats-result" id="inputs-count"></span>
+    <button id="inputs-hide" title="Close">Close</button>
+  </header>
+  <div class="floating-body" id="inputs-body"></div>
+</aside>
+<p id="toast" class="toast" role="status" hidden></p>
 
-  <h2 class="part">How the answer is computed</h2>
-
-  <section class="step">
-    <h3>1. One swing is a weighted coin</h3>
-    <p>Every swing hits or misses. Only the gap between the attacker's attack and the defender's defence matters.</p>
-    <div id="coins"></div>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="p_A = \min\!\left(1,\ \max\!\left(0,\ \frac{35 + \mathrm{MA}_A - \mathrm{MD}_B}{100}\right)\right)"></div>
-      <p class="note">A probability cannot leave the range 0 to 1, hence the min and max. The game itself clamps to 8% to 90% (not applied here).</p>
-    </details>
-  </section>
-
-  <section class="step">
-    <h3>2. Hits needed is a fixed number</h3>
-    <p>Hit points and damage only matter through this count. Each block is one hit.</p>
-    <div id="hits"></div>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="k_A = \left\lceil \frac{\mathrm{HP}_B}{D_A} \right\rceil"></div>
-      <p class="note">The brackets mean "round up": 120 HP at 25 damage needs 5 hits, not 4.8.</p>
-    </details>
-  </section>
-
-  <section class="step">
-    <h3>3. Swings needed is random</h3>
-    <p>Count the swings until the k-th hit. That count follows the negative binomial distribution. Dashed lines mark the means.</p>
-    <div class="legend" id="swinglegend"></div>
-    <div class="chart"><canvas id="swingchart" role="img" aria-label="Probability of finishing on each swing, unit A and unit B"></canvas></div>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="P(N_A = n) = \binom{n-1}{k_A-1}\, p_A^{\,k_A}\,(1-p_A)^{\,n-k_A}, \qquad n \ge k_A"></div>
-      <div class="tex" data-tex="\mathbb{E}[N_A] = \frac{k_A}{p_A}, \qquad \mathrm{sd}(N_A) = \frac{\sqrt{k_A(1-p_A)}}{p_A}"></div>
-      <p class="note">The last swing must be a hit (one factor p). The n&minus;1 swings before it hold exactly k&minus;1 hits in any order (the binomial coefficient).</p>
-    </details>
-  </section>
-
-  <section class="step">
-    <h3>4. Swings become a time</h3>
-    <p>Both soldiers swing first at t = 0, then once per attack interval. A slower soldier's curve is stretched to the right.</p>
-    <div class="legend" id="timelegend"></div>
-    <div class="chart"><canvas id="timechart" role="img" aria-label="Probability of landing the killing blow at each moment, in seconds"></canvas></div>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="T_A = a\,(N_A - 1), \qquad T_B = b\,(N_B - 1)"></div>
-      <p class="note">a and b are the two attack intervals. Swing 1 lands at t = 0, swing n at t = a(n&minus;1).</p>
-    </details>
-  </section>
-
-  <section class="step">
-    <h3>5. The race</h3>
-    <p>For each moment A could land its killing blow, take the chance that B has not finished yet. Add them up.</p>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="m(n) = \left\lfloor \frac{a\,(n-1)}{b} \right\rfloor + 1"></div>
-      <p class="note">m(n) is how many swings B has made by the time A's n-th swing lands.</p>
-      <div class="tex" data-tex="P(A \text{ wins}) = \sum_{n \ge k_A} P(N_A = n)\; P\big(N_B > m(n)\big)"></div>
-      <div class="tex" data-tex="P(\text{both die}) = \sum_{n \,:\, b \text{ divides } a(n-1)} P(N_A = n)\; P\big(N_B = m(n)\big)"></div>
-      <p class="note">Both die only when B swings at exactly the same instant and that swing is B's killing blow.</p>
-    </details>
-  </section>
-
-  <section class="step">
-    <h3>6. How long the fight lasts</h3>
-    <p>The fight ends at the first killing blow. It is still going at time t only if both soldiers are still standing.</p>
-    <details><summary>Formula</summary>
-      <div class="tex" data-tex="T = \min(T_A, T_B), \qquad P(T > t) = P(T_A > t)\,P(T_B > t)"></div>
-      <div class="tex" data-tex="\mathbb{E}[T] = \int_0^\infty P(T > t)\,dt"></div>
-      <p class="note">The two soldiers' luck is independent, so the chances multiply.</p>
-    </details>
-  </section>
-
-  <h2 class="part">Check it by simulation</h2>
-
-  <section class="step">
-    <p>Fight one duel swing by swing, or many, and compare with the exact numbers.</p>
-    <div class="buttons"><button id="one">Fight one duel</button><button id="many">Simulate 10,000 duels</button></div>
-    <div id="replay"></div>
-    <div id="simtable"></div>
-  </section>
-
-  <footer>Model version 2: hit chance, hits needed, attack interval.</footer>
-</main>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/site.js"></script>
 </body>
 </html>

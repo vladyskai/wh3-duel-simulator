@@ -1,0 +1,4 @@
+# Batch 2, 2026-11-28: does script control tilt an even fight? our files, enemy files, both attack, times, who stays under script control
+20 20 1 10 both
+20 20 1 10 enemy
+20 20 1 6 none

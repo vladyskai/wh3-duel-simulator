@@ -1,0 +1,12 @@
+# unit variants batch, 2026-11-28
+elite sw 20 20 1 4
+sw elite 20 20 1 2
+tough sw 20 20 1 4
+s160 s160 20 20 1 3
+s60 s60 20 20 1 4
+sw s60 20 20 1 3
+s160 s60 20 20 1 2
+s160 s160 40 40 1 2
+s60 s60 10 10 1 2
+tough tough 20 20 1 3
+s160 sw 20 20 1 2

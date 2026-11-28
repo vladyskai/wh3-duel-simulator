@@ -1,0 +1,14 @@
+# unit variants batch, 20 units per side, no experience, 2026-11-28
+lanes 12
+elite sw 20 20 1 6
+sw elite 20 20 1 4
+tough sw 20 20 1 6
+s160 s160 20 20 1 5
+s60 s60 20 20 1 6
+sw s60 20 20 1 5
+s160 s60 20 20 1 4
+s160 s160 40 40 1 4
+s60 s60 10 10 1 4
+tough tough 20 20 1 5
+s160 sw 20 20 1 5
+sw sw 20 20 1 6

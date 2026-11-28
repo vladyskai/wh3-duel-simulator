@@ -1,3 +1,5 @@
 __pycache__/
 *.log
 node_modules/
+# a full copy of the game-side test log: the per-session logs beside it hold the same lines
+docs/battle_logs/zz_duel_test_log_full_game_copy.txt
